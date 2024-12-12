@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class RegistroAlumno extends StatefulWidget {
   final String accion;
@@ -61,9 +63,73 @@ class _RegistroAlumnoState extends State<RegistroAlumno> {
     );
   }
 
-  void _submit() {
-    // Aquí enviarías la mutación GraphQL para agregar o modificar el alumno
-    // Puedes usar el ID del alumno si es modificación o usar uno nuevo si es agregar
-    Navigator.pop(context);
+  Future<void> _submit() async {
+    final name = _nameController.text;
+    final age = int.tryParse(_ageController.text) ?? 0;
+    final grade = _gradeController.text;
+
+    if (name.isEmpty || age <= 0 || grade.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Por favor completa todos los campos')),
+      );
+      return;
+    }
+
+    final url = Uri.parse('http://127.0.0.1:25577/graphql');
+    final headers = {'Content-Type': 'application/json'};
+
+    String query;
+    if (widget.accion == 'agregar') {
+      query = '''
+        mutation {
+          addAlumno(name: "$name", age: $age, grade: "$grade") {
+            id
+            name
+            age
+            grade
+          }
+        }
+      ''';
+    } else {
+      final id = widget.alumno['id'];
+      query = '''
+        mutation {
+          updateAlumno(id: "$id", name: "$name", age: $age, grade: "$grade") {
+            id
+            name
+            age
+            grade
+          }
+        }
+      ''';
+    }
+
+    final body = json.encode({'query': query});
+
+    try {
+      final response = await http.post(url, headers: headers, body: body);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['errors'] != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: ${data['errors'][0]['message']}')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Operación exitosa')),
+          );
+          Navigator.pop(context);
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error en la conexión con el servidor')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
   }
 }
